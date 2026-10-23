@@ -50,23 +50,23 @@ const RoutineResultCard = React.memo(({
         </Metric>
         <Dot />
         <Metric>
-          {formatMinutes(routine.spanMinutes)}{' '}
           <MetricExplainer
             type="span"
-            label="span"
+            label={formatMinutes(routine.spanMinutes)}
             value={routine.spanMinutes}
             dailySpans={dailySpans}
-          />
+          />{' '}
+          span
         </Metric>
         <Dot />
         <Metric>
-          {formatMinutes(routine.contactMinutes)} of{' '}
           <MetricExplainer
             type="class"
-            label="class"
+            label={formatMinutes(routine.contactMinutes)}
             value={routine.contactMinutes}
             spanMinutes={routine.spanMinutes}
-          />
+          />{' '}
+          of class
         </Metric>
         <Dot />
         <Metric>{routine.credits} cr</Metric>

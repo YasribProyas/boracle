@@ -65,7 +65,7 @@ const MetricExplainer = ({
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        className="text-sm font-semibold text-[#6F3E1B] dark:text-[#D48B55] underline decoration-dotted decoration-[#6F3E1B]/60 dark:decoration-[#D48B55]/60 underline-offset-4 hover:decoration-[#6F3E1B] dark:hover:decoration-[#D48B55] hover:text-[#522c12] dark:hover:text-[#f0ad7d] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6F3E1B]/40 rounded-sm"
+        className="text-sm font-semibold tabular-nums text-[#6F3E1B] dark:text-[#D48B55] underline decoration-dotted decoration-[#6F3E1B]/60 dark:decoration-[#D48B55]/60 underline-offset-4 hover:decoration-[#6F3E1B] dark:hover:decoration-[#D48B55] hover:text-[#522c12] dark:hover:text-[#f0ad7d] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6F3E1B]/40 rounded-sm"
       >
         {label}
       </button>
