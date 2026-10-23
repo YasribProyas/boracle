@@ -115,3 +115,39 @@ export const compareSections = (a, b) => {
   if (ta !== tb) return ta < tb ? -1 : 1;
   return String(a.sectionId) < String(b.sectionId) ? -1 : 1;
 };
+
+export const formatMinutes = (minutes) => {
+  if (!minutes) return '0m';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+};
+
+/**
+ * Calculates the span in minutes for each day of the week from section meetings.
+ * Span is measured from earliest start to latest end on that day.
+ * Returns an object mapping day names to span minutes: { 'SUNDAY': 260, 'MONDAY': 440, ... }
+ */
+export const computeDailySpans = (sections = []) => {
+  const bounds = new Map();
+  (sections || []).forEach((section) => {
+    if (!section) return;
+    const meetings = meetingsOf(section);
+    meetings.forEach(({ day, start, end }) => {
+      const current = bounds.get(day);
+      if (!current) {
+        bounds.set(day, { start, end });
+      } else {
+        if (start < current.start) current.start = start;
+        if (end > current.end) current.end = end;
+      }
+    });
+  });
+
+  const spans = {};
+  bounds.forEach(({ start, end }, day) => {
+    spans[day] = Math.max(end - start, 0);
+  });
+  return spans;
+};

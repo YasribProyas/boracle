@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Download, Eye, Save } from 'lucide-react';
 import RoutineTableGrid from '@/components/routine/RoutineTableGrid';
+import MetricExplainer from '@/components/automate-routine/MetricExplainer';
+import { computeDailySpans } from '@/lib/automate-routine/model';
 
 export const formatMinutes = (minutes) => {
   const h = Math.floor(minutes / 60);
@@ -35,6 +37,8 @@ const RoutineResultCard = React.memo(({
 }) => {
   const seats = routine.seatsLeft;
 
+  const dailySpans = useMemo(() => computeDailySpans(courses), [courses]);
+
   return (
     <div className="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -45,9 +49,25 @@ const RoutineResultCard = React.memo(({
           {routine.days} {routine.days === 1 ? 'day' : 'days'} on campus
         </Metric>
         <Dot />
-        <Metric>{formatMinutes(routine.spanMinutes)} span</Metric>
+        <Metric>
+          {formatMinutes(routine.spanMinutes)}{' '}
+          <MetricExplainer
+            type="span"
+            label="span"
+            value={routine.spanMinutes}
+            dailySpans={dailySpans}
+          />
+        </Metric>
         <Dot />
-        <Metric>{formatMinutes(routine.contactMinutes)} of class</Metric>
+        <Metric>
+          {formatMinutes(routine.contactMinutes)} of{' '}
+          <MetricExplainer
+            type="class"
+            label="class"
+            value={routine.contactMinutes}
+            spanMinutes={routine.spanMinutes}
+          />
+        </Metric>
         <Dot />
         <Metric>{routine.credits} cr</Metric>
         {showSeats && seats !== null && (
@@ -65,7 +85,7 @@ const RoutineResultCard = React.memo(({
           crushing seven day columns into 340px. */}
       <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
         <div className="min-w-[560px]">
-          <RoutineTableGrid selectedCourses={courses} compact showRemoveButtons={false} forceDesktop />
+          <RoutineTableGrid selectedCourses={courses} compact showRemoveButtons={false} forceDesktop showDailySpan />
         </div>
       </div>
 

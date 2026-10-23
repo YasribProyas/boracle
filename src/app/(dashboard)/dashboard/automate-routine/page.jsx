@@ -959,6 +959,7 @@ const AutomateRoutinePage = () => {
           isSaving={savingKey === preview.routine.signature}
           showExportButton
           forceDesktopGrid
+          showDailySpan
         />
       )}
 

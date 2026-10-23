@@ -24,6 +24,7 @@ const RoutineView = ({
     routineRefProp, // Allow parent to access ref
     showExportButton = true,
     onEdit,
+    showDailySpan = false,
 }) => {
     const internalRoutineRef = useRef(null);
     // Use prop ref if available, otherwise internal
@@ -202,6 +203,7 @@ const RoutineView = ({
                     onRemoveCourse={onRemoveCourse}
                     className="h-full"
                     mobileAction={mobileAction}
+                    showDailySpan={showDailySpan}
                 />
             </div>
         </div>
@@ -284,6 +286,7 @@ const RoutineView = ({
                                     showRemoveButtons={showRemoveButtons}
                                     onRemoveCourse={onRemoveCourse}
                                     forceDesktop
+                                    showDailySpan={showDailySpan}
                                 />
                             </div>
                         </div>
@@ -293,6 +296,7 @@ const RoutineView = ({
                             showRemoveButtons={showRemoveButtons}
                             onRemoveCourse={onRemoveCourse}
                             className="h-full"
+                            showDailySpan={showDailySpan}
                         />
                     )}
                 </div>
@@ -319,6 +323,7 @@ const RoutineView = ({
                             showRemoveButtons={false}
                             forceDesktop={true}
                             className=""
+                            showDailySpan={showDailySpan}
                         />
                     </div>
                 </div>
