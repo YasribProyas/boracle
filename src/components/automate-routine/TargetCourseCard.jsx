@@ -98,8 +98,8 @@ const TargetCourseCard = ({
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <MultiSelectDropdown
           label="Sections"
-          placeholder="None selected"
-          anyLabel="All sections"
+          placeholder="Any section"
+          anyLabel="Any section"
           options={sectionOptions}
           selected={liveSelectedIds}
           onChange={onSectionsChange}

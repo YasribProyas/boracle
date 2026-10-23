@@ -173,7 +173,7 @@ const AutomateRoutinePage = () => {
     () =>
       items.map((item) => {
         const base = rowsByCode.get(item.courseCode) || [];
-        const pinned = item.sections !== undefined
+        const pinned = item.sections?.length
           ? base.filter((row) => item.sections.includes(row.sectionId))
           : base;
         const byFaculty = item.faculties?.length
@@ -186,9 +186,12 @@ const AutomateRoutinePage = () => {
 
   const facultyOptions = useMemo(() => {
     const set = new Set();
-    pools.forEach((pool) => pool.sections.forEach((row) => facultyCodes(row).forEach((f) => set.add(f))));
+    items.forEach((item) => {
+      const base = rowsByCode.get(item.courseCode) || [];
+      base.forEach((row) => facultyCodes(row).forEach((f) => set.add(f)));
+    });
     return [...set].sort();
-  }, [pools]);
+  }, [items, rowsByCode]);
 
   const preferredFacultyMap = useMemo(() => {
     const map = {};
@@ -200,13 +203,24 @@ const AutomateRoutinePage = () => {
     return map;
   }, [items]);
 
+  const preferredFacultySet = useMemo(() => {
+    const set = new Set();
+    items.forEach((item) => (item.faculties || []).forEach((f) => set.add(f)));
+    return set;
+  }, [items]);
+
   const slotLabels = useMemo(() => getRoutineTimings(), []);
 
   // Slot strings from a previous registration period (Ramadan swaps them) would be
   // invisible here and silently inert — keep only the ones the current grid offers.
+  // Also ensure faculties chosen as preferred in any course are never in avoidFaculty.
   const activeConstraints = useMemo(
-    () => ({ ...constraints, avoidSlots: (constraints.avoidSlots || []).filter((s) => slotLabels.includes(s)) }),
-    [constraints, slotLabels]
+    () => ({
+      ...constraints,
+      avoidSlots: (constraints.avoidSlots || []).filter((s) => slotLabels.includes(s)),
+      avoidFaculty: (constraints.avoidFaculty || []).filter((f) => !preferredFacultySet.has(f)),
+    }),
+    [constraints, slotLabels, preferredFacultySet]
   );
 
   const sortedResults = useMemo(() => {
@@ -295,9 +309,7 @@ const AutomateRoutinePage = () => {
         toast.error(`${courseCode} isn't in this semester's catalog`);
         return;
       }
-      const courseRows = rowsByCode.get(courseCode) || [];
-      const allSectionIds = courseRows.map((r) => r.sectionId);
-      patchInputs({ items: [...items, { courseCode, sections: allSectionIds, faculties: [] }] });
+      patchInputs({ items: [...items, { courseCode, sections: [], faculties: [] }] });
       setSearchTerm('');
       setSearchOpen(false);
     },
@@ -503,11 +515,7 @@ const AutomateRoutinePage = () => {
       const base = rowsByCode.get(item.courseCode) || [];
       if (!base.length) return 'This course has no sections in the catalog.';
 
-      if (item.sections !== undefined && item.sections.length === 0) {
-        return 'No sections selected — choose at least one section from the dropdown above.';
-      }
-
-      const pinned = item.sections !== undefined
+      const pinned = item.sections?.length
         ? base.filter((row) => item.sections.includes(row.sectionId))
         : base;
 
@@ -673,7 +681,7 @@ const AutomateRoutinePage = () => {
         />
 
         <div className="flex-1 relative" ref={searchRef}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 w-5 h-5" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 w-5 h-5 pointer-events-none" />
           <input
             type="text"
             value={searchTerm}
@@ -693,7 +701,7 @@ const AutomateRoutinePage = () => {
             }}
             placeholder="Add a course by code or title… e.g. CSE101 or Calculus"
             aria-label="Search courses to add"
-            className="w-full h-[50px] pl-10 pr-4 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full h-[50px] pl-11 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-400 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-500 font-medium focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 shadow-sm transition-colors"
           />
           {searchOpen && matches.length > 0 && (
             <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
@@ -759,7 +767,7 @@ const AutomateRoutinePage = () => {
                 courseCode={item.courseCode}
                 courseName={titleByCode.get(item.courseCode) || ''}
                 rows={rowsByCode.get(item.courseCode) || []}
-                selectedIds={item.sections}
+                selectedIds={item.sections || []}
                 facultyPrefs={item.faculties || []}
                 candidateCount={pool?.sections?.length ?? 0}
                 conflictMessage={getCourseConflictMessage(item)}

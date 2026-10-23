@@ -80,19 +80,29 @@ const ConstraintPanel = ({
     });
   };
 
+  const preferredSet = useMemo(
+    () => new Set(Object.keys(preferredFacultyMap || {})),
+    [preferredFacultyMap]
+  );
+
+  const availableFaculty = useMemo(
+    () => facultyOptions.filter((f) => !preferredSet.has(f)),
+    [facultyOptions, preferredSet]
+  );
+
   const filteredFaculty = useMemo(() => {
     const term = facultySearch.trim().toUpperCase();
-    const list = term ? facultyOptions.filter((f) => f.includes(term)) : facultyOptions;
-    const avoid = constraints.avoidFaculty || [];
+    const list = term ? availableFaculty.filter((f) => f.includes(term)) : availableFaculty;
+    const avoid = (constraints.avoidFaculty || []).filter((f) => !preferredSet.has(f));
     // Chosen ones always stay visible, otherwise removing them would be a hunt.
     const merged = [...new Set([...avoid, ...list])];
     return merged.slice(0, showAllFaculty || term ? merged.length : 12);
-  }, [facultyOptions, facultySearch, constraints.avoidFaculty, showAllFaculty]);
+  }, [availableFaculty, facultySearch, constraints.avoidFaculty, preferredSet, showAllFaculty]);
 
   const activeAvoidCount =
     (constraints.avoidDays?.length || 0) +
     (constraints.avoidSlots?.length || 0) +
-    (constraints.avoidFaculty?.length || 0);
+    (constraints.avoidFaculty || []).filter((f) => !preferredSet.has(f)).length;
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
@@ -197,14 +207,12 @@ const ConstraintPanel = ({
           <div className="mt-2 flex flex-wrap gap-1.5">
             {filteredFaculty.map((code) => {
               const on = (constraints.avoidFaculty || []).includes(code);
-              const preferredIn = preferredFacultyMap?.[code];
               return (
                 <button
                   key={code}
                   type="button"
                   aria-pressed={on}
                   onClick={() => toggleIn('avoidFaculty', code)}
-                  title={preferredIn ? `Preferred in ${preferredIn} — selecting avoid will unselect it from ${preferredIn}` : undefined}
                   className={`${CHIP_BASE} ${on ? CHIP_ON : CHIP_OFF}`}
                 >
                   {on && <X className="inline w-3 h-3 mr-1 -mt-0.5" />}
@@ -213,16 +221,20 @@ const ConstraintPanel = ({
               );
             })}
             {!filteredFaculty.length && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">No faculty among these courses.</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {preferredSet.size > 0 && facultyOptions.length > 0
+                  ? 'All faculty for these courses are selected as preferred.'
+                  : 'No faculty among these courses.'}
+              </span>
             )}
           </div>
-          {facultyOptions.length > 12 && !facultySearch && (
+          {availableFaculty.length > 12 && !facultySearch && (
             <button
               type="button"
               onClick={() => setShowAllFaculty((v) => !v)}
               className="mt-2 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
             >
-              {showAllFaculty ? 'Show fewer' : `Show all ${facultyOptions.length}`}
+              {showAllFaculty ? 'Show fewer' : `Show all ${availableFaculty.length}`}
             </button>
           )}
         </div>
