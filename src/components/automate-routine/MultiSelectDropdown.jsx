@@ -92,18 +92,28 @@ const MultiSelectDropdown = ({
           className="absolute left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => onChange([])}
-              disabled={!chosen.length}
-              className={`text-xs font-medium ${
-                chosen.length
-                  ? 'text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
-                  : 'text-blue-700 dark:text-blue-300 pointer-events-none'
-              }`}
-            >
-              {chosen.length ? `Clear (${chosen.length})` : anyLabel}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onChange(options.map((o) => o.value))}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Select all
+              </button>
+              <span className="text-gray-300 dark:text-gray-600 text-xs">·</span>
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                disabled={!chosen.length}
+                className={`text-xs font-medium ${
+                  chosen.length
+                    ? 'text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+                    : 'text-gray-400 dark:text-gray-600 pointer-events-none'
+                }`}
+              >
+                {chosen.length ? `Clear (${chosen.length})` : anyLabel}
+              </button>
+            </div>
             <span className="text-xs text-gray-400 dark:text-gray-500">{options.length} total</span>
           </div>
 

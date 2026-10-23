@@ -56,7 +56,14 @@ const DayStepper = ({ label, value, min, max, onChange }) => (
  * candidate pools before the search runs, so they can empty a course entirely — the
  * page surfaces that, never this component.
  */
-const ConstraintPanel = ({ constraints, onChange, slotLabels = [], facultyOptions = [], showSeatToggle = false }) => {
+const ConstraintPanel = ({
+  constraints,
+  onChange,
+  slotLabels = [],
+  facultyOptions = [],
+  preferredFacultyMap = {},
+  showSeatToggle = false,
+}) => {
   const [facultySearch, setFacultySearch] = useState('');
   const [showAllFaculty, setShowAllFaculty] = useState(false);
   // Chip grids eat vertical space on a single-column phone; dropdowns carry the same
@@ -190,12 +197,14 @@ const ConstraintPanel = ({ constraints, onChange, slotLabels = [], facultyOption
           <div className="mt-2 flex flex-wrap gap-1.5">
             {filteredFaculty.map((code) => {
               const on = (constraints.avoidFaculty || []).includes(code);
+              const preferredIn = preferredFacultyMap?.[code];
               return (
                 <button
                   key={code}
                   type="button"
                   aria-pressed={on}
                   onClick={() => toggleIn('avoidFaculty', code)}
+                  title={preferredIn ? `Preferred in ${preferredIn} — selecting avoid will unselect it from ${preferredIn}` : undefined}
                   className={`${CHIP_BASE} ${on ? CHIP_ON : CHIP_OFF}`}
                 >
                   {on && <X className="inline w-3 h-3 mr-1 -mt-0.5" />}

@@ -220,7 +220,6 @@ const RoutineTableGrid = ({
                                     } group relative flex flex-col justify-center ${compact ? 'min-h-[36px]' : 'min-h-[76px]'}`}
                                   onMouseEnter={(e) => {
                                     if (canHoverRemove && !isPreview) startHoverRemove(course);
-                                    if (compact) return;
                                     setHoveredCourse(course);
                                     setHoveredCourseTitle(`${course.courseCode}${isLab ? 'L' : ''}`);
                                     const rect = e.currentTarget.getBoundingClientRect();
@@ -238,7 +237,6 @@ const RoutineTableGrid = ({
                                   }}
                                   onMouseLeave={() => {
                                     if (canHoverRemove && !isPreview) cancelHoverRemove();
-                                    if (compact) return;
                                     setHoveredCourse(null);
                                     setHoveredCourseTitle(null);
                                   }}

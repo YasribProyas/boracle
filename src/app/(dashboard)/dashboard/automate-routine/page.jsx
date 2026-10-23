@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Search, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Sparkles, Wand2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import RoutineView from '@/components/routine/RoutineView';
@@ -144,21 +144,27 @@ const AutomateRoutinePage = () => {
 
   // ---------------------------------------------------------------- derived
 
-  const rowsByCode = useMemo(() => {
-    const map = new Map();
-    courses.forEach((row) => {
-      if (!map.has(row.courseCode)) map.set(row.courseCode, []);
-      map.get(row.courseCode).push(row);
-    });
-    return map;
-  }, [courses]);
+  // ---------------------------------------------------------------- catalog cache & derived
 
-  const titleByCode = useMemo(() => {
-    const map = new Map();
+  const { rowsByCode, titleByCode, courseList } = useMemo(() => {
+    const rowsMap = new Map();
+    const titleMap = new Map();
+    const list = [];
     courses.forEach((row) => {
-      if (!map.has(row.courseCode)) map.set(row.courseCode, row.courseName || '');
+      const code = row.courseCode;
+      if (!code) return;
+      if (!rowsMap.has(code)) {
+        rowsMap.set(code, []);
+        const title = row.courseName || '';
+        titleMap.set(code, title);
+        list.push({ code, title, count: 0 });
+      }
+      rowsMap.get(code).push(row);
     });
-    return map;
+    list.forEach((entry) => {
+      entry.count = rowsMap.get(entry.code)?.length || 0;
+    });
+    return { rowsByCode: rowsMap, titleByCode: titleMap, courseList: list };
   }, [courses]);
 
   const hasSeatData = useMemo(() => courses.some((row) => row.capacity != null), [courses]);
@@ -167,7 +173,9 @@ const AutomateRoutinePage = () => {
     () =>
       items.map((item) => {
         const base = rowsByCode.get(item.courseCode) || [];
-        const pinned = item.sections?.length ? base.filter((row) => item.sections.includes(row.sectionId)) : base;
+        const pinned = item.sections !== undefined
+          ? base.filter((row) => item.sections.includes(row.sectionId))
+          : base;
         const byFaculty = item.faculties?.length
           ? pinned.filter((row) => facultyCodes(row).some((f) => item.faculties.includes(f)))
           : pinned;
@@ -181,6 +189,16 @@ const AutomateRoutinePage = () => {
     pools.forEach((pool) => pool.sections.forEach((row) => facultyCodes(row).forEach((f) => set.add(f))));
     return [...set].sort();
   }, [pools]);
+
+  const preferredFacultyMap = useMemo(() => {
+    const map = {};
+    items.forEach((item) => {
+      (item.faculties || []).forEach((f) => {
+        map[f] = item.courseCode;
+      });
+    });
+    return map;
+  }, [items]);
 
   const slotLabels = useMemo(() => getRoutineTimings(), []);
 
@@ -222,18 +240,43 @@ const AutomateRoutinePage = () => {
 
   const patchConstraints = useCallback(
     (patch) => {
-      patchInputs({ constraints: { ...constraints, ...patch } });
+      let nextItems = items;
+      if (patch.avoidFaculty !== undefined) {
+        // Mutual exclusivity: if a faculty is avoided, remove it from any course's preferred faculty
+        const avoidSet = new Set(patch.avoidFaculty);
+        const hasConflict = items.some((item) => (item.faculties || []).some((f) => avoidSet.has(f)));
+        if (hasConflict) {
+          nextItems = items.map((item) => ({
+            ...item,
+            faculties: (item.faculties || []).filter((f) => !avoidSet.has(f)),
+          }));
+        }
+      }
+      patchInputs({
+        items: nextItems,
+        constraints: { ...constraints, ...patch },
+      });
     },
-    [constraints, patchInputs]
+    [constraints, items, patchInputs]
   );
 
   const patchItem = useCallback(
     (courseCode, patch) => {
+      let nextAvoidFaculty = constraints.avoidFaculty || [];
+      if (patch.faculties?.length) {
+        // Mutual exclusivity: if a faculty is preferred in a course, remove it from avoidFaculty
+        const preferredSet = new Set(patch.faculties);
+        const hadAvoided = nextAvoidFaculty.some((f) => preferredSet.has(f));
+        if (hadAvoided) {
+          nextAvoidFaculty = nextAvoidFaculty.filter((f) => !preferredSet.has(f));
+        }
+      }
       patchInputs({
         items: items.map((item) => (item.courseCode === courseCode ? { ...item, ...patch } : item)),
+        constraints: { ...constraints, avoidFaculty: nextAvoidFaculty },
       });
     },
-    [items, patchInputs]
+    [constraints, items, patchInputs]
   );
 
   const addCourse = useCallback(
@@ -252,7 +295,9 @@ const AutomateRoutinePage = () => {
         toast.error(`${courseCode} isn't in this semester's catalog`);
         return;
       }
-      patchInputs({ items: [...items, { courseCode, sections: [], faculties: [] }] });
+      const courseRows = rowsByCode.get(courseCode) || [];
+      const allSectionIds = courseRows.map((r) => r.sectionId);
+      patchInputs({ items: [...items, { courseCode, sections: allSectionIds, faculties: [] }] });
       setSearchTerm('');
       setSearchOpen(false);
     },
@@ -435,24 +480,170 @@ const AutomateRoutinePage = () => {
     };
   }, [searchOpen]);
 
-  // "422" must find CSE422, so codes match anywhere, not just as a prefix; prefix hits
-  // and title hits are grouped so the most likely target still surfaces first.
+  // Search runs against cached unique course code/title list
   const matches = useMemo(() => {
     const term = searchTerm.trim().toUpperCase();
     if (!term) return [];
     const prefix = [];
     const partial = [];
     const byTitle = [];
-    rowsByCode.forEach((rows, code) => {
-      const title = (titleByCode.get(code) || '').toUpperCase();
-      const entry = { code, title: titleByCode.get(code) || '', count: rows.length };
+    courseList.forEach((entry) => {
+      const code = entry.code;
+      const title = entry.title.toUpperCase();
       if (code.startsWith(term)) prefix.push(entry);
       else if (code.includes(term)) partial.push(entry);
       else if (title.includes(term)) byTitle.push(entry);
     });
     const sortCode = (a, b) => (a.code < b.code ? -1 : 1);
     return [...prefix.sort(sortCode), ...partial.sort(sortCode), ...byTitle.sort(sortCode)].slice(0, 12);
-  }, [searchTerm, rowsByCode, titleByCode]);
+  }, [searchTerm, courseList]);
+
+  const getCourseConflictMessage = useCallback(
+    (item) => {
+      const base = rowsByCode.get(item.courseCode) || [];
+      if (!base.length) return 'This course has no sections in the catalog.';
+
+      if (item.sections !== undefined && item.sections.length === 0) {
+        return 'No sections selected — choose at least one section from the dropdown above.';
+      }
+
+      const pinned = item.sections !== undefined
+        ? base.filter((row) => item.sections.includes(row.sectionId))
+        : base;
+
+      if (item.faculties?.length) {
+        const matchingFaculty = pinned.filter((row) =>
+          facultyCodes(row).some((f) => item.faculties.includes(f))
+        );
+        if (!matchingFaculty.length) {
+          return `None of the selected sections match faculty ${item.faculties.join(', ')} — select matching sections or clear the faculty filter.`;
+        }
+      }
+
+      const byFaculty = item.faculties?.length
+        ? pinned.filter((row) => facultyCodes(row).some((f) => item.faculties.includes(f)))
+        : pinned;
+
+      if (activeConstraints.avoidFaculty?.length) {
+        const withAvoidFaculty = byFaculty.filter(
+          (r) => !facultyCodes(r).some((f) => activeConstraints.avoidFaculty.includes(f))
+        );
+        if (!withAvoidFaculty.length) {
+          const hit = [...new Set(byFaculty.flatMap(facultyCodes).filter((f) => activeConstraints.avoidFaculty.includes(f)))];
+          return `Every section is taught by an avoided faculty (${hit.join(', ')}) — remove them from Avoid Faculty.`;
+        }
+      }
+
+      if (activeConstraints.avoidDays?.length) {
+        const withAvoidDays = byFaculty.filter((r) => {
+          const days = (r.sectionSchedule?.classSchedules || []).map((s) => s.day).concat(
+            (r.labSchedules || []).map((s) => s.day)
+          );
+          return !days.some((d) => activeConstraints.avoidDays.includes(d));
+        });
+        if (!withAvoidDays.length) {
+          const daysHit = [...new Set(byFaculty.flatMap((r) =>
+            (r.sectionSchedule?.classSchedules || []).map((s) => s.day).concat(
+              (r.labSchedules || []).map((s) => s.day)
+            )
+          ).filter((d) => activeConstraints.avoidDays.includes(d)))];
+          return `Every section meets on an avoided day (${daysHit.join(', ')}) — uncheck ${daysHit.join(', ')} in Avoid Days.`;
+        }
+      }
+
+      if (activeConstraints.avoidSlots?.length) {
+        return 'Every section falls in an avoided time slot — uncheck conflicting slots in Avoid Time Slots.';
+      }
+
+      if (activeConstraints.excludeKnownFull) {
+        const withSeats = byFaculty.filter((r) => {
+          const s = seatInfo(r);
+          return s.seatsLeft === null || s.seatsLeft > 0;
+        });
+        if (!withSeats.length) {
+          return 'All remaining sections are full — toggle off "Skip sections that are full".';
+        }
+      }
+
+      return 'No sections left to schedule — try widening section or constraint choices.';
+    },
+    [rowsByCode, activeConstraints]
+  );
+
+  const specificFixes = useMemo(() => {
+    if (!results?.exhausted?.length) return [];
+    const fixes = [];
+    const seen = new Set();
+
+    results.exhausted.forEach((entry) => {
+      if (entry.reason === 'avoidDay' && entry.constraint) {
+        const key = `day:${entry.constraint}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const dayName = entry.constraint.charAt(0) + entry.constraint.slice(1).toLowerCase();
+          fixes.push({
+            key,
+            label: `Allow ${dayName}`,
+            action: () => {
+              patchConstraints({
+                avoidDays: (constraints.avoidDays || []).filter(
+                  (d) => d.toUpperCase() !== entry.constraint.toUpperCase()
+                ),
+              });
+              setTimeout(runGenerate, 0);
+            },
+          });
+        }
+      } else if (entry.reason === 'avoidFaculty' && entry.constraint) {
+        const key = `faculty:${entry.constraint}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          fixes.push({
+            key,
+            label: `Allow faculty ${entry.constraint}`,
+            action: () => {
+              patchConstraints({
+                avoidFaculty: (constraints.avoidFaculty || []).filter(
+                  (f) => f.toUpperCase() !== entry.constraint.toUpperCase()
+                ),
+              });
+              setTimeout(runGenerate, 0);
+            },
+          });
+        }
+      } else if (entry.reason === 'avoidSlot' && entry.constraint) {
+        const key = `slot:${entry.constraint}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          fixes.push({
+            key,
+            label: `Allow slot ${entry.constraint}`,
+            action: () => {
+              patchConstraints({
+                avoidSlots: (constraints.avoidSlots || []).filter((s) => s !== entry.constraint),
+              });
+              setTimeout(runGenerate, 0);
+            },
+          });
+        }
+      } else if (entry.reason === 'full') {
+        const key = 'full';
+        if (!seen.has(key)) {
+          seen.add(key);
+          fixes.push({
+            key,
+            label: 'Allow full sections',
+            action: () => {
+              patchConstraints({ excludeKnownFull: false });
+              setTimeout(runGenerate, 0);
+            },
+          });
+        }
+      }
+    });
+
+    return fixes;
+  }, [results?.exhausted, constraints, patchConstraints, runGenerate]);
 
   // ---------------------------------------------------------------- render
 
@@ -515,7 +706,9 @@ const AutomateRoutinePage = () => {
                 >
                   <span className="font-medium text-gray-900 dark:text-white">{match.code}</span>
                   <span className="text-gray-500 dark:text-gray-400 truncate">{match.title}</span>
-                  <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">{match.count} sec</span>
+                  <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                    {match.count} {match.count === 1 ? 'section' : 'sections'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -545,10 +738,15 @@ const AutomateRoutinePage = () => {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Add the courses you are taking this semester. The search runs over every section of each
-            course, so you can leave the detail to us or pin the sections you care about.
+        <div className="bg-white dark:bg-gray-900 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl p-8 text-center flex flex-col items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2.5">
+            <Search className="w-5 h-5" />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Add your courses to get started
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
+            Search courses above by code or title to generate conflict-free routines.
           </p>
         </div>
       ) : (
@@ -561,9 +759,10 @@ const AutomateRoutinePage = () => {
                 courseCode={item.courseCode}
                 courseName={titleByCode.get(item.courseCode) || ''}
                 rows={rowsByCode.get(item.courseCode) || []}
-                selectedIds={item.sections || []}
+                selectedIds={item.sections}
                 facultyPrefs={item.faculties || []}
                 candidateCount={pool?.sections?.length ?? 0}
+                conflictMessage={getCourseConflictMessage(item)}
                 onSectionsChange={(sections) => patchItem(item.courseCode, { sections })}
                 onFacultiesChange={(faculties) => patchItem(item.courseCode, { faculties })}
                 onRemove={() => removeCourse(item.courseCode)}
@@ -582,6 +781,7 @@ const AutomateRoutinePage = () => {
           onChange={patchConstraints}
           slotLabels={slotLabels}
           facultyOptions={facultyOptions}
+          preferredFacultyMap={preferredFacultyMap}
           showSeatToggle={hasSeatData}
         />
       )}
@@ -612,28 +812,46 @@ const AutomateRoutinePage = () => {
       {results && (
         <div className="space-y-3">
           {results.exhausted.length > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                Nothing can be scheduled yet
-              </h3>
-              <ul className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-300">
-                {results.exhausted.map((entry) => (
-                  <li key={entry.courseCode}>
-                    <span className="font-medium">{entry.courseCode}</span>
-                    {` — ${EXHAUSTED_TEXT[entry.reason]?.(entry.constraint) || 'no sections left after your choices'}`}
-                  </li>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                    Nothing can be scheduled yet
+                  </h3>
+                </div>
+                <ul className="space-y-1 text-sm text-amber-800 dark:text-amber-200 pl-6">
+                  {results.exhausted.map((entry) => (
+                    <li key={entry.courseCode} className="leading-snug">
+                      <span className="font-semibold">{entry.courseCode}</span>
+                      {` — ${EXHAUSTED_TEXT[entry.reason]?.(entry.constraint) || 'no sections left after your choices'}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0 md:justify-end">
+                {specificFixes.map((fix) => (
+                  <button
+                    key={fix.key}
+                    type="button"
+                    onClick={fix.action}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-sm"
+                  >
+                    {fix.label}
+                  </button>
                 ))}
-              </ul>
-              <button
-                type="button"
-                onClick={() => {
-                  patchConstraints({ avoidDays: [], avoidSlots: [], avoidFaculty: [], excludeKnownFull: false });
-                  setTimeout(runGenerate, 0);
-                }}
-                className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors"
-              >
-                Clear the constraints and try again
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    patchConstraints({ avoidDays: [], avoidSlots: [], avoidFaculty: [], excludeKnownFull: false });
+                    setTimeout(runGenerate, 0);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                >
+                  Clear all constraints
+                </button>
+              </div>
             </div>
           )}
 
